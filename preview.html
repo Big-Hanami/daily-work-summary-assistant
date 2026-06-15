@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Work Summary Assistant Preview</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="app-card">
+        <header class="app-header">
+          <div>
+            <p class="eyebrow">Daily Work Summary Assistant</p>
+            <h1>แอปสรุปงานประจำวัน</h1>
+            <p class="subtitle">พิมพ์งานทีละรายการ แล้วให้แอปจัดเลขลำดับให้อัตโนมัติ</p>
+          </div>
+
+          <label class="date-picker">
+            <span>เลือกวันที่</span>
+            <input id="dateInput" type="date" aria-label="เลือกวันที่สรุปงาน" />
+          </label>
+        </header>
+
+        <section class="summary-panel" aria-label="ข้อความสรุปงาน">
+          <textarea id="summaryText" class="summary-textarea" readonly></textarea>
+
+          <div class="action-row">
+            <button id="copyButton" class="primary-button" type="button">
+              คัดลอก / สรุปงาน
+            </button>
+            <button id="clearButton" class="secondary-button" type="button">
+              ล้างข้อมูล
+            </button>
+          </div>
+
+          <p id="copyStatus" class="copy-status" role="status"></p>
+        </section>
+
+        <form id="inputForm" class="input-panel">
+          <textarea
+            id="taskInput"
+            placeholder="พิมพ์งานที่ทำวันนี้ หรือวางหลายบรรทัดเพื่อเพิ่มหลายรายการ"
+            aria-label="ช่องกรอกงานประจำวัน"
+          ></textarea>
+          <button id="sendButton" class="send-button" type="submit">ส่งข้อมูล</button>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const storageKey = "daily-work-summary-assistant:v1";
+      const dateInput = document.querySelector("#dateInput");
+      const summaryText = document.querySelector("#summaryText");
+      const copyButton = document.querySelector("#copyButton");
+      const clearButton = document.querySelector("#clearButton");
+      const copyStatus = document.querySelector("#copyStatus");
+      const inputForm = document.querySelector("#inputForm");
+      const taskInput = document.querySelector("#taskInput");
+      const sendButton = document.querySelector("#sendButton");
+
+      let tasks = [];
+
+      const toDateInputValue = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
+      const toDisplayDate = (value) => {
+        const [year, month, day] = value.split("-");
+        return `${day}/${month}/${year}`;
+      };
+
+      const splitTaskInput = (value) =>
+        value
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+      const buildSummaryText = () => {
+        const header = `สรุปการทำงาน ${toDisplayDate(dateInput.value)}`;
+        const lines = tasks.map((task, index) => `${index + 1}.${task}`);
+        return [header, ...lines].join("\n");
+      };
+
+      const getDynamicFontSize = (length) => {
+        if (length > 1600) return 14;
+        if (length > 1000) return 15;
+        if (length > 600) return 16;
+        if (length > 300) return 17;
+        return 19;
+      };
+
+      const save = () => {
+        localStorage.setItem(storageKey, JSON.stringify({ selectedDate: dateInput.value, tasks }));
+      };
+
+      const render = () => {
+        const text = buildSummaryText();
+        summaryText.value = text;
+        summaryText.style.fontSize = `${getDynamicFontSize(text.length)}px`;
+        sendButton.textContent = "ส่งข้อมูล";
+
+        save();
+      };
+
+      const load = () => {
+        dateInput.value = toDateInputValue(new Date());
+        try {
+          const savedReport = JSON.parse(localStorage.getItem(storageKey) || "{}");
+          if (typeof savedReport.selectedDate === "string") dateInput.value = savedReport.selectedDate;
+          if (Array.isArray(savedReport.tasks)) tasks = savedReport.tasks.filter((task) => typeof task === "string");
+        } catch {
+          localStorage.removeItem(storageKey);
+        }
+      };
+
+      inputForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const newTasks = splitTaskInput(taskInput.value);
+        if (newTasks.length === 0) return;
+
+        tasks = [...tasks, ...newTasks];
+        taskInput.value = "";
+        copyStatus.textContent = "";
+        render();
+      });
+
+      taskInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          inputForm.requestSubmit();
+        }
+      });
+
+      dateInput.addEventListener("change", render);
+      clearButton.addEventListener("click", () => {
+        tasks = [];
+        taskInput.value = "";
+        copyStatus.textContent = "";
+        render();
+      });
+
+      copyButton.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(summaryText.value);
+          copyStatus.textContent = "คัดลอกเรียบร้อยแล้ว ✨";
+        } catch {
+          summaryText.focus();
+          summaryText.select();
+
+          try {
+            const copied = document.execCommand("copy");
+            copyStatus.textContent = copied
+              ? "คัดลอกเรียบร้อยแล้ว ✨"
+              : "เลือกข้อความให้แล้ว กด Ctrl + C เพื่อคัดลอก";
+          } catch {
+            copyStatus.textContent = "เลือกข้อความให้แล้ว กด Ctrl + C เพื่อคัดลอก";
+          }
+        }
+      });
+
+      load();
+      render();
+    </script>
+  </body>
+</html>
